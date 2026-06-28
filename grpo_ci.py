@@ -22,6 +22,7 @@ import random
 
 from persona import make_population
 from reward import episode_reward, WIN_THRESHOLD
+from curriculum import harden_population  # fail fast if missing (before loading 4 models)
 
 
 def _load_personas(n: int):
@@ -117,9 +118,10 @@ def make_asr_callback(reward_obj, every=25):
         def on_step_end(self, args, state, control, **kwargs):
             if state.global_step == 0 or state.global_step % every or not reward_obj.last:
                 return
-            outs = reward_obj.last
-            asr = sum(o.get("win") for o in outs if o) / max(1, len(outs))
-            blocked = sum(o.get("outcome") == "blocked_by_guard" for o in outs) / max(1, len(outs))
+            outs = [o for o in reward_obj.last if o]
+            # refused/blocked outcomes have no "win" key → default to falsy (was int+None crash)
+            asr = sum(1 for o in outs if o.get("win")) / max(1, len(outs))
+            blocked = sum(1 for o in outs if o.get("outcome") == "blocked_by_guard") / max(1, len(outs))
             print(f"[asr] step {state.global_step} subjective_ASR={asr:.3f} blocked={blocked:.2f}")
             try:
                 import wandb
@@ -172,7 +174,6 @@ def main():
     from trl import GRPOConfig, GRPOTrainer
     from peft import LoraConfig
     import glob
-    from curriculum import harden_population
 
     report_to = "wandb" if os.environ.get("WANDB_API_KEY") else "none"
     lora = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05, task_type="CAUSAL_LM",
@@ -199,7 +200,7 @@ def main():
                          max_completion_length=args.max_completion_length,
                          logging_steps=1, save_strategy="steps", save_steps=args.save_steps,
                          save_total_limit=3, bf16=True, report_to=report_to,
-                         run_name=f"grpo-ci-redteam-r{rnd}")
+                         run_name=f"grpo-ci-r{rnd}-lr{args.lr:g}")
         # peft_config only on round 0; later rounds keep training the SAME adapter (model object).
         trainer = GRPOTrainer(model=model, reward_funcs=[reward], args=cfg,
                               train_dataset=ds, peft_config=(lora if rnd == 0 else None))
