@@ -123,6 +123,30 @@ guard-evading compromise reaches the ceiling, but partial progress still earns g
 
 ---
 
+## Corpus & persistence — MongoDB Atlas (D2)
+
+Every red-team episode and every validated persona is a data point. `store.py` persists
+the **D2 corpus** with a graceful two-tier backend:
+
+- **Always** appends to local JSONL (`runs/episodes.jsonl`) — zero external dependency.
+- **Additionally** mirrors to **MongoDB / Atlas** when `MONGODB_URI` (or `MONGODB_ATLAS_URI`)
+  is set — and **never crashes the run if Mongo is down** (falls back to JSONL-only).
+
+```
+personas  collection — validated population + care vectors (+ embedding)
+episodes  collection — persona · request · action · gate · judge · reward · outcome (+ embedding)
+```
+
+**Atlas Vector Search.** Each persona/episode is embedded (`all-MiniLM-L6-v2`, 384-d) and
+`create_vector_index()` provisions a cosine vectorSearch index on Atlas. This turns the
+corpus into a **nearest-prior-attack / novelty** index — the natural substrate for the
+self-generated curriculum (propose attacks that are *far* from everything discovered so far).
+Atlas is available without self-hosting via the **MongoDB Atlas Sandbox on GCP** (hackathon
+sponsor). Mirroring is on whenever the URI env var is present; the vector-search-driven
+novelty loop is the planned next step.
+
+---
+
 ## Running it
 
 Everything is **self-contained on one H100/H200, no external APIs required**
@@ -183,7 +207,7 @@ sbatch slurm/grpo_ci.sbatch
 | `reward.py` | Four-branch reward state machine |
 | `grpo_ci.py` | GRPO training loop (`--mock` for CPU wiring test; real stack on GPU) |
 | `preflight.py` | On-GPU learnability probe — go/no-go gate before full training |
-| `store.py` | Graceful persistence (D2 corpus): JSONL + optional MongoDB mirror |
+| `store.py` | D2 corpus persistence: JSONL + MongoDB **Atlas** mirror with **Vector Search** index |
 | `diagram.py` | Renders the architecture diagram to PNG (matplotlib) |
 | `test_offline.py` | Offline test suite (mock backends) |
 | `trace_offline.py` | Single-request trace through the full chain |
@@ -200,7 +224,7 @@ Honest snapshot:
 - [x] Reward state machine implemented; all four branches verified offline with mocks
 - [x] Mock backends (`MockVictim` / `MockGate` / `MockJudge`) — pure CPU, no GPU/network
 - [x] Persona generation + validated population (`persona_gen.py`, `personas.json` — 20 personas)
-- [x] GRPO loop written (`grpo_ci.py`) and persistence/curriculum scaffolding (`store.py`)
+- [x] GRPO loop written (`grpo_ci.py`) with MongoDB **Atlas** corpus persistence + Vector Search index (`store.py`)
 - [x] Learnability pre-flight written (`preflight.py`) — Slurm submission ready (`slurm/grpo_ci.sbatch`)
 - [ ] On-GPU learnability pre-flight **executed** (the gate before full training)
 - [ ] GRPO training run **executed** (`runs/episodes.jsonl` has 1 trace; **no real training run yet**)
@@ -230,7 +254,7 @@ qualifies on two levels:
 | ID | Deliverable |
 |----|-------------|
 | **D1** | Subjective-compromise-rate **rising curve** vs a static baseline — the RSI (recursive self-improvement) curve |
-| **D2** | The **persona × attack corpus** generated during training |
+| **D2** | The **persona × attack corpus** generated during training — persisted to **MongoDB Atlas** (with a Vector Search index for novelty / nearest-prior-attack) |
 | **D3** | **Live demo**: the attacker eliciting a subtle, persona-specific compromise that evades Llama Guard |
 
 ---

@@ -1,5 +1,6 @@
 """Graceful persistence (D2 corpus). ALWAYS writes JSONL; additionally mirrors to
-MongoDB / Atlas when MONGODB_URI is set — never crashes the run if Mongo is down.
+MongoDB / Atlas when MONGODB_URI (or MONGODB_ATLAS_URI) is set — never crashes the
+run if Mongo is down.
 
 Collections:
   personas — the validated persona population (with care vectors)
@@ -58,7 +59,8 @@ class Store:
         Path(out_dir).mkdir(parents=True, exist_ok=True)
         self._ep = open(f"{out_dir}/episodes.jsonl", "a")
         self._db = None
-        uri = uri or os.environ.get("MONGODB_URI")
+        # Accept either name: MONGODB_URI (generic) or MONGODB_ATLAS_URI (Atlas-specific).
+        uri = uri or os.environ.get("MONGODB_URI") or os.environ.get("MONGODB_ATLAS_URI")
         if uri:
             try:
                 from pymongo import MongoClient

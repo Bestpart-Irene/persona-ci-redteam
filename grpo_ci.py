@@ -140,7 +140,7 @@ def main():
         from judge import GemmaJudge
         victim, gate, judge = LocalVictim(), LlamaGuardGate(), GemmaJudge()
     from store import Store
-    store = Store(run_id="grpo-ci", uri=os.environ.get("MONGODB_URI"))
+    store = Store(run_id="grpo-ci")  # resolves MONGODB_URI / MONGODB_ATLAS_URI from env
     store.save_personas(personas)
     print(f"[ci] corpus backend: {store.backend}")
     reward = CIReward(personas, victim, gate, judge, store=store)
