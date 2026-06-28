@@ -44,15 +44,21 @@ manipulation, not blatant, easily-blocked asks.
 The training loop is a chain. The **persona** defines what "compromise" means; the
 **attacker** is the only component whose weights change.
 
+The persona feeds the chain **asymmetrically**: the attacker sees only a short *brief*
+(the `descriptor` + one sampled target — an `info_type` and a forbidden recipient), while
+the **full care vector** is injected into the **guard** (as its CI policy) and the **judge**
+(as ground truth). That information gap *is* the difficulty — the attacker must **discover**
+the boundaries it cannot see, which is what forces subtle, guard-evading manipulation.
+
 Two recursive loops — **Loop 1 updates the attacker's weights; Loop 2 updates the persona
 distribution** (the target). They feed different parts of the system:
 
 ```
 ┌─►┌──────────────────────────── PERSONA · structured care vector ──────────────────────────┐
 │  │  info_type → {sensitivity, forbidden / allowed_recipients, forbidden_purposes}          │
-│  └──────────────────────────────────────────┬───────────────────────────────────────────-┘
-│                          defines "compromise" │
-│                                               ▼
+│  └────┬───────────────────────────────────────────┬─────────────────────┬─────────────────┘
+│       │ descriptor                                │ full care vector    │ full care vector
+│       ▼ + 1 target (brief)                        ▼ = guard policy      ▼ = judge truth
 │  ┌──────────┐  request  ┌────────┐ action ┌──────────────┐ passes ┌───────────┐
 │  │①ATTACKER │──────────►│②VICTIM │───────►│③ LLAMA GUARD3│───────►│④ CI JUDGE │
 │  │Qwen3-4B  │           │Llama3.1│        │care vector = │        │Qwen2.5-32B│
