@@ -145,6 +145,15 @@ Atlas is available without self-hosting via the **MongoDB Atlas Sandbox on GCP**
 sponsor). Mirroring is on whenever the URI env var is present; the vector-search-driven
 novelty loop is the planned next step.
 
+If a run finished with Atlas offline, `backfill.py` reloads the JSONL corpus, recomputes
+embeddings, upserts into Atlas, and (re)creates the Vector Search index — so the demo
+corpus is identical to live mirroring:
+
+```bash
+python backfill.py --dry-run                                  # count + validate, no DB
+MONGODB_ATLAS_URI=...  python backfill.py runs/episodes.jsonl --personas personas.json
+```
+
 ---
 
 ## Running it
@@ -208,6 +217,7 @@ sbatch slurm/grpo_ci.sbatch
 | `grpo_ci.py` | GRPO training loop (`--mock` for CPU wiring test; real stack on GPU) |
 | `preflight.py` | On-GPU learnability probe — go/no-go gate before full training |
 | `store.py` | D2 corpus persistence: JSONL + MongoDB **Atlas** mirror with **Vector Search** index |
+| `backfill.py` | Load the JSONL corpus into Atlas after the fact (embeddings + Vector Search index) |
 | `diagram.py` | Renders the architecture diagram to PNG (matplotlib) |
 | `test_offline.py` | Offline test suite (mock backends) |
 | `trace_offline.py` | Single-request trace through the full chain |
