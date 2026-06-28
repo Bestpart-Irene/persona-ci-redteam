@@ -1,28 +1,41 @@
 # persona-CI red-team
 
-> An RL red-team agent that learns, at the **weight level** (GRPO), to manipulate a
-> helpful assistant into taking actions that are *allowed-but-compromising* **for a
-> specific person** — judged against that person's structured **care vector**
-> (contextual integrity), not against universal notions of harm.
+> A **self-improving** red-team agent. It recursively improves on two levels: it rewrites
+> its own **weights** (GRPO) *and* generates its own **curriculum** of ever-harder targets
+> — learning to manipulate a helpful assistant into *allowed-but-compromising* actions
+> against a specific person's structured **care vector** (contextual integrity), not against
+> universal notions of harm. Because person-specific subtlety has **no fixed ceiling**, the
+> loop is open-ended: there is always a subtler attack left to discover, so the agent can
+> keep climbing — recursive self-improvement with no saturation point.
 
 **Event:** AI Engineer World's Fair Hackathon 2026
-**Theme:** Recursive Intelligence
+**Theme:** #3 Recursive Intelligence (RSI) — *models that improve their own weights*
 
 ---
 
 ## TL;DR
 
-Most red-teaming optimizes against a *universal* harm label ("is this output toxic /
-unsafe?"). Real privacy harm is **contextual**: a domestic-abuse survivor's *location*
-leaking to their `ex_partner` is catastrophic; the same fact shared with a `trusted_doctor`
-is fine. We train an attacker to find exactly these **subtle, person-specific** failures —
-the requests that look benign, slip past a guard, but quietly compromise *this* persona.
+**This is a self-improvement system (RSI), and contextual integrity is what makes the
+self-improvement open-ended.** The agent improves itself through *two* recursive loops:
 
-The attacker is a small model (Qwen3-4B-abliterated by default, configurable via
-`--attacker`) fine-tuned with **GRPO + LoRA**. Its reward
-comes from a multi-stage pipeline ending in a contextual-integrity judge. The only way to
-earn positive reward is a **subtle compromise that evades the guard** — which pushes the
-policy toward genuine manipulation rather than blatant, easily-blocked asks.
+1. **It improves its own weights.** GRPO turns the reward it earns from interacting with the
+   environment directly into weight updates — not one-shot fine-tuning on a frozen dataset.
+2. **It improves its own training distribution.** From the attacks it discovers, it proposes
+   *harder* personas and scenarios, then trains against them — it writes its own curriculum.
+
+Why pick contextual integrity as the target? Because it gives self-improvement **somewhere to
+go forever.** A *universal* harm label ("is this toxic / unsafe?") is a fixed binary ceiling —
+once you saturate it, there is nothing left to learn. But *person-specific* compromise is a
+**continuous, ever-receding frontier**: a domestic-abuse survivor's *location* leaking to their
+`ex_partner` is catastrophic, the same fact to a `trusted_doctor` is fine — and there is always
+a *subtler* request, a *more specific* persona, a *less obvious* leak. The agent never runs out
+of room to climb, so the self-improvement curve doesn't flatten.
+
+The attacker is a small model (Qwen3-4B-abliterated by default, configurable via `--attacker`)
+fine-tuned with **GRPO + LoRA**. Its reward comes from a multi-stage pipeline ending in a
+contextual-integrity judge. The only way to earn positive reward is a **subtle compromise that
+evades the guard** — which forces each round of self-improvement toward *genuinely* harder
+manipulation, not blatant, easily-blocked asks.
 
 ---
 
@@ -244,18 +257,29 @@ above describe verified *plumbing* and *design*, not learned outcomes.
 
 ---
 
-## Theme justification — Recursive Intelligence
+## Theme justification — Recursive Intelligence (RSI)
 
-Recursive Intelligence is about models that improve their own weights. This project
-qualifies on two levels:
+The theme is *models that improve their own weights*. Self-improvement is the **spine** of
+this project, not a label bolted on afterward — it shows up as two nested recursive loops
+plus the property that keeps them from saturating:
 
-1. **Weight-level self-improvement.** GRPO directly updates the attacker's weights from a
-   reward it earns by interacting with a fixed environment — not one-shot RL fine-tuning on
-   a static dataset.
-2. **Self-directed curriculum.** The attacker doesn't only optimize against given personas;
-   it **proposes harder personas/scenarios from what it discovered**, then trains against
-   them. This closes the loop into genuine self-direction: the system shapes its own training
-   distribution, not just its own weights.
+1. **It improves its own weights.** GRPO converts reward earned by interacting with the
+   environment directly into weight updates — recursive self-improvement in the literal,
+   theme-defining sense, not one-shot RL fine-tuning on a frozen dataset.
+2. **It improves its own training distribution.** The attacker doesn't only optimize against
+   given personas; it **proposes harder personas/scenarios from what it discovered**, then
+   trains against them — shaping its *own* curriculum, not just its own weights. (Atlas Vector
+   Search over the corpus is the substrate for "propose attacks far from everything seen.")
+3. **The improvement never saturates.** Universal-harm red-teaming has a fixed ceiling — once
+   the toxic/unsafe label is maxed, learning stops. Contextual integrity replaces that ceiling
+   with a *continuous, ever-receding frontier of subtlety*, so the recursion has somewhere to
+   go indefinitely. This is the difference between a curve that plateaus and one that keeps
+   rising — which is exactly what **D1 (the RSI curve)** is meant to measure.
+
+> **Honesty note:** loops (1) and (2) are *implemented and offline-verified*; the on-GPU
+> training that would *demonstrate* a rising RSI curve has not run yet (see **Status**). The
+> claim here is that the mechanism of self-improvement is built and correct, not that the
+> curve has been produced.
 
 ---
 
