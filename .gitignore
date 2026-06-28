@@ -1,0 +1,42 @@
+# ── secrets / credentials (NEVER commit) ──────────────────────────────
+.env
+.env.*
+*.env
+env
+secrets*
+*secret*
+*.key
+*.pem
+*token*
+*credential*
+*apikey*
+*api_key*
+*.netrc
+.config/
+
+# ── school cluster config (Explorer / Slurm — institutional, machine-specific) ──
+slurm/
+*.sbatch
+*.slurm
+logs/
+slurm-*.out
+
+# ── experiment tracking / model caches / artifacts ────────────────────
+wandb/
+hf_cache/
+.cache/
+runs/ci/
+runs/**/checkpoint-*/
+*.ckpt
+*.safetensors
+*.bin
+*.pt
+
+# ── python ────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.venv/
+venv/
+.DS_Store
