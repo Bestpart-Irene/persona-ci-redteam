@@ -83,14 +83,14 @@ ladder = ("REWARD LADDER (monotone in subtlety):\n"
 ax.text(4.6, 3.05, ladder, ha="center", va="center", fontsize=8.0,
         bbox=dict(boxstyle="round,pad=0.5", fc="#FFF8E1", ec="#FDCB6E", lw=1.2))
 
-# ---- self-generated curriculum (bottom-left, out of the arc) ----
+# ---- LOOP 2: self-generated curriculum (bottom-left) — closes back onto ① ----
 box(0.4, 1.15, 3.7, 1.0, "SELF-GEN CURRICULUM",
-    "attacker proposes harder\npersonas from what it found",
+    "solved personas → harder\ndescendants (curriculum.py)",
     C["curric"])
-arrow(9.1, y0, 4.1, 1.85, color=C["curric"], rad=0.25, ls="--",
-      label="discovered weaknesses", lx=1.0, ly=0.55)
-arrow(1.3, 2.15, 1.2, y0, color=C["curric"], rad=0.30, ls="--",
-      label="feed back to ①", lx=-0.95, ly=0.2)
+arrow(11.3, ry+0.2, 4.1, 1.85, color=C["curric"], rad=0.22, ls="--",
+      label="per-persona win-rate", lx=1.3, ly=0.5)
+arrow(1.0, 2.15, 4.2, 7.9, color=C["curric"], rad=0.32, ls="--",
+      label="harder personas\nrebuild PERSONA pool", lx=-0.7, ly=-0.3)
 
 ax.text(7.0, 8.85, "persona-CI red-team  —  GRPO weight-level RSI loop",
         ha="center", fontsize=14, fontweight="bold")

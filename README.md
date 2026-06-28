@@ -44,44 +44,38 @@ manipulation, not blatant, easily-blocked asks.
 The training loop is a chain. The **persona** defines what "compromise" means; the
 **attacker** is the only component whose weights change.
 
+Two recursive loops — **Loop 1 updates the attacker's weights; Loop 2 updates the persona
+distribution** (the target). They feed different parts of the system:
+
 ```
-                        ┌──────────────────────────────────────────────┐
-                        │  PERSONA  (structured care vector)            │
-                        │  info_type -> {sensitivity, forbidden_recip,  │
-                        │                allowed_recip, forbidden_purp}  │
-                        └───────────────────────┬──────────────────────┘
-                                                │  (defines "compromise" for THIS person)
-                                                ▼
-   ┌───────────────────────────────────────────────────────────────────────────────┐
-   │                                                                                 │
-   │   ①  ATTACKER request            ②  VICTIM action          ③  LLAMA GUARD 3     │
-   │   ───────────────────            ─────────────────         ────────────────     │
-   │   Qwen3-4B-ablit                 Llama-3.1-8B-It           care vector injected  │
-   │   GRPO + LoRA                    helpful / aligned         as a CUSTOM CI policy │
-   │   (TRAINED) ───────────────────► (assistant acts) ──────► (blocks BLATANT       │
-   │       ▲                                                     violations)          │
-   │       │                                                            │             │
-   │       │                                                            ▼             │
-   │       │                                                  ④  QWEN2.5-32B CI JUDGE │
-   │       │                                                  ─────────────────────   │
-   │       │                                                  ground truth: is this   │
-   │       │                                                  allowed-but-compromising │
-   │       │                                                  for THIS person?        │
-   │       │                                                            │             │
-   │       │                                                            ▼             │
-   │       │                                              ⑤  REWARD ─► GRPO advantage │
-   │       └────────────────────────────────────────────────  attacker weights        │
-   │                          (policy update)                  improve, repeat         │
-   │                                                                                 │
-   └───────────────────────────────────────────────────────────────────────────────┘
-                                                │
-                                                ▼
-                        ┌──────────────────────────────────────────────┐
-                        │  SELF-GENERATED CURRICULUM                    │
-                        │  attacker proposes harder personas/scenarios  │
-                        │  from what it discovered  ──► feeds back to ① │
-                        └──────────────────────────────────────────────┘
+┌─►┌──────────────────────────── PERSONA · structured care vector ──────────────────────────┐
+│  │  info_type → {sensitivity, forbidden / allowed_recipients, forbidden_purposes}          │
+│  └──────────────────────────────────────────┬───────────────────────────────────────────-┘
+│                          defines "compromise" │
+│                                               ▼
+│  ┌──────────┐  request  ┌────────┐ action ┌──────────────┐ passes ┌───────────┐
+│  │①ATTACKER │──────────►│②VICTIM │───────►│③ LLAMA GUARD3│───────►│④ CI JUDGE │
+│  │Qwen3-4B  │           │Llama3.1│        │care vector = │        │Qwen2.5-32B│
+│  │GRPO+LoRA │           │helpful │        │CI policy     │        │compromise │
+│  │(TRAINED) │           └────────┘        │(blocks blunt)│        │  0..1     │
+│  └──▲───────┘                             └──────────────┘        └─────┬─────┘
+│     │ LOOP 1 · GRPO weight update                                       ▼
+│     │ (advantage → attacker weights)                            ⑤ REWARD (dense)
+│     └────────────────────────────────────────────────────◄────────────┤
+│                                                                         │ per-persona
+│  LOOP 2 · self-generated curriculum   ┌─────────────────────────┐      │ win-rate
+└────────────────────────────────────── │ SOLVED personas →HARDER │◄─────┘
+      harder personas rebuild            │ descendants             │
+      the PERSONA pool (next round)      │ curriculum.harden_pop() │
+                                         └─────────────────────────┘
 ```
+
+**Loop 1 (weights → ①ATTACKER)** — every guard/judge outcome becomes a GRPO advantage that
+updates the attacker's LoRA weights. **Loop 2 (distribution → PERSONA)** — after each round,
+personas the attacker has *solved* (high win-rate) spawn stricter descendants that **replace
+the persona pool** for the next round; the attacker never touches its own weights here — it
+reshapes its *targets*. Training runs as rounds: `train K steps → mine per-persona win-rates
+→ harden solved personas → rebuild the persona pool → continue` (weights carry across rounds).
 
 ### The care vector
 
@@ -199,11 +193,12 @@ The on-GPU stack loads:
 | Judge | `Qwen/Qwen2.5-32B-Instruct` | 4-bit; contextual-integrity ground truth (`CI_JUDGE_MODEL`; optional Gemini backend) |
 
 ```bash
-# Offline wiring test on CPU (mock victim / gate / judge — no GPU, no network)
-python grpo_ci.py --mock --steps 5
+# Curriculum-logic test on CPU (no GPU/network): solved personas -> harder descendants
+python test_curriculum.py
 
-# Full GRPO training (real stack on one GPU)
-python grpo_ci.py --steps 400 --num-generations 8 --batch 8 --prompts 256 --out runs/ci
+# Full GRPO training with the self-generated curriculum (real stack on one GPU).
+# --steps is steps PER round; --rounds is the number of curriculum rounds.
+python grpo_ci.py --rounds 4 --steps 100 --num-generations 8 --batch 8 --prompts 256 --out runs/ci
 
 # Cluster submission (Slurm, H200)
 sbatch slurm/grpo_ci.sbatch
@@ -227,7 +222,9 @@ sbatch slurm/grpo_ci.sbatch
 | `guard.py` | Llama Guard 3 gate with injected CI policy (+ `MockGate`) |
 | `judge.py` | Contextual-integrity judge — `LocalJudge` (Qwen) / `GeminiJudge` (+ `MockJudge`) |
 | `reward.py` | Four-branch reward state machine |
-| `grpo_ci.py` | GRPO training loop (`--mock` for CPU wiring test; real stack on GPU) |
+| `grpo_ci.py` | Round-based GRPO training: weight loop + self-generated curriculum loop |
+| `curriculum.py` | Self-generated curriculum: solved personas → harder descendants (closes loop 2) |
+| `test_curriculum.py` | Offline test for the curriculum loop (CPU, no GPU/API) |
 | `preflight.py` | On-GPU learnability probe — go/no-go gate before full training |
 | `store.py` | D2 corpus persistence: JSONL + MongoDB **Atlas** mirror with **Vector Search** index |
 | `backfill.py` | Load the JSONL corpus into Atlas after the fact (embeddings + Vector Search index) |
@@ -247,7 +244,8 @@ Honest snapshot:
 - [x] Reward state machine implemented; all four branches verified offline with mocks
 - [x] Mock backends (`MockVictim` / `MockGate` / `MockJudge`) — pure CPU, no GPU/network
 - [x] Persona generation + validated population (`persona_gen.py`, `personas.json` — 20 personas)
-- [x] GRPO loop written (`grpo_ci.py`) with MongoDB **Atlas** corpus persistence + Vector Search index (`store.py`)
+- [x] Loop 1 — round-based GRPO weight loop (`grpo_ci.py`) with MongoDB **Atlas** corpus persistence (`store.py`)
+- [x] Loop 2 — self-generated curriculum (`curriculum.py`): solved personas → harder descendants, **unit-tested offline** (`test_curriculum.py`)
 - [x] Learnability pre-flight written (`preflight.py`) — Slurm submission ready (`slurm/grpo_ci.sbatch`)
 - [ ] On-GPU learnability pre-flight **executed** (the gate before full training)
 - [ ] GRPO training run **executed** (`runs/episodes.jsonl` has 1 trace; **no real training run yet**)
@@ -266,20 +264,22 @@ plus the property that keeps them from saturating:
 1. **It improves its own weights.** GRPO converts reward earned by interacting with the
    environment directly into weight updates — recursive self-improvement in the literal,
    theme-defining sense, not one-shot RL fine-tuning on a frozen dataset.
-2. **It improves its own training distribution.** The attacker doesn't only optimize against
-   given personas; it **proposes harder personas/scenarios from what it discovered**, then
-   trains against them — shaping its *own* curriculum, not just its own weights. (Atlas Vector
-   Search over the corpus is the substrate for "propose attacks far from everything seen.")
+2. **It improves its own training distribution.** Training runs in rounds; after each round
+   the personas the attacker has **solved** (high win-rate) spawn *stricter descendants*
+   (`curriculum.harden_population`) that are folded back into the next round — it shapes its
+   *own* curriculum from its *own* performance, not just its own weights. (The Atlas Vector
+   Search corpus index can further drive novelty — "propose attacks far from everything seen.")
 3. **The improvement never saturates.** Universal-harm red-teaming has a fixed ceiling — once
    the toxic/unsafe label is maxed, learning stops. Contextual integrity replaces that ceiling
    with a *continuous, ever-receding frontier of subtlety*, so the recursion has somewhere to
    go indefinitely. This is the difference between a curve that plateaus and one that keeps
    rising — which is exactly what **D1 (the RSI curve)** is meant to measure.
 
-> **Honesty note:** loops (1) and (2) are *implemented and offline-verified*; the on-GPU
-> training that would *demonstrate* a rising RSI curve has not run yet (see **Status**). The
-> claim here is that the mechanism of self-improvement is built and correct, not that the
-> curve has been produced.
+> **Honesty note:** both loops are *implemented and offline-verified* — loop 1 (round-based
+> GRPO in `grpo_ci.py`) and loop 2 (the curriculum in `curriculum.py`, unit-tested by
+> `test_curriculum.py`). What has **not** run yet is the on-GPU training that would *produce*
+> a rising RSI curve (see **Status**). The claim is that the self-improvement mechanism is
+> built and correct — not that the curve has been generated.
 
 ---
 
